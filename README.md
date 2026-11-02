@@ -194,3 +194,32 @@ tests/           # testes unitários e simulação do ciclo Groq
 ```
 
 Projeto educacional para uma organização e loja fictícias; não é serviço oficial da loja.
+
+
+## Validação com Groq real (fase 2)
+
+Depois de configurar `.env` **somente no seu computador**, rode:
+
+```bash
+python -m pip install -e '.[llm]'
+python -m app.cli --provider groq --message "Quanto custa o Violão Aurora GD20?"
+python -m scripts.live_smoke
+python -m unittest discover -s tests -v
+```
+
+`live_smoke` faz **três cenários reais** em um SQLite temporário usando apenas
+fixtures sintéticas. Verifica a ferramenta invocada e alguns fatos da resposta.
+Não imprime prompts, respostas, clientes ou chave de API. Cada teste gera uma
+nova sessão, e a chamada pode consumir quota gratuita; não é executado no CI.
+Uma falha indica algo a investigar, não comprova necessariamente defeito no
+modelo. Revisão humana de tom, precisão e segurança ainda é necessária.
+
+O orquestrador desativa ferramentas paralelas para compatibilidade com GPT-OSS
+20B/120B e diferencia falhas de autenticação (401/403), requisição inválida
+(400/404/422) e limite de quota (429), sem revelar mensagens brutas da API.
+O rastreamento em memória expõe somente nomes das ferramentas, quantidade de
+requisições e código HTTP, nunca seus argumentos.
+
+Se a chave tiver sido exposta em terminal compartilhado, Git, chat ou captura
+de tela, revogue-a no GroqCloud e gere outra. Configure `.env` localmente;
+**nunca faça commit do arquivo `.env` nem registre a chave em GitHub Actions**.

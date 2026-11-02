@@ -49,6 +49,9 @@ class Session:
     history: list[dict] = field(default_factory=list)
     verified_order_ids: set[int] = field(default_factory=set)
     pending_order_id: int | None = None
+    last_tool_calls: list[str] = field(default_factory=list)
+    last_llm_requests: int = 0
+    last_error_code: int | None = None
 
 
 def redact(text: str) -> str:
@@ -125,13 +128,28 @@ class Agent:
         return answer
 
     def _llm(self, question: str, session: Session) -> str:
+        session.last_tool_calls.clear()
+        session.last_llm_requests = 0
+        session.last_error_code = None
         messages = [{"role": "system", "content": SYSTEM_PROMPT}, *session.history[-10:], {"role": "user", "content": question}]
         for _ in range(4):
             try:
+                session.last_llm_requests += 1
                 result = self.client.chat.completions.create(
                     model=self.model, messages=messages, tools=TOOLS,
-                    tool_choice="auto", temperature=0.1, max_tokens=600)
-            except Exception:
+                    tool_choice="auto", parallel_tool_calls=False,
+                    temperature=0.1, max_completion_tokens=1024)
+            except Exception as exc:
+                # Never send exception details to the customer: they may contain
+                # provider metadata or sensitive request information.
+                status = getattr(exc, "status_code", None)
+                session.last_error_code = status if isinstance(status, int) else None
+                if status in (401, 403):
+                    return "Falha de autenticação no provedor de IA. Verifique GROQ_API_KEY localmente."
+                if status == 429:
+                    return "O limite de requisições do Groq foi atingido. Aguarde e tente novamente."
+                if status in (400, 404, 422):
+                    return "O Groq rejeitou a requisição. Confira o modelo configurado e a compatibilidade das ferramentas."
                 return "Não consegui consultar o assistente de IA agora. Tente novamente ou procure o atendimento humano."
             output = result.choices[0].message
             calls = output.tool_calls or []
@@ -143,6 +161,7 @@ class Agent:
                 {"id": c.id, "type": "function", "function": {"name": c.function.name, "arguments": c.function.arguments}}
                 for c in calls]})
             for c in calls:
+                session.last_tool_calls.append(c.function.name)
                 try:
                     args = json.loads(c.function.arguments or "{}")
                     if not isinstance(args, dict):

@@ -1,0 +1,7 @@
+product_id,price_brl,name,category_id,description,stock_quantity,status,specs,created_at
+1,599.90,Violão Aurora C40 Nylon Natural,5,Violão clássico de estudo com cordas de nylon,12,active,{},2026-01-01
+2,849.00,Violão Horizonte C70 Nylon Natural,5,Violão intermediário com cordas de nylon,8,active,{},2026-01-01
+3,1299.00,Guitarra Estrela S100 Sunburst,1,Guitarra elétrica para rock e blues,6,active,{},2026-01-01
+4,2199.00,Violão Aurora GD20 Dreadnought,5,Violão folk de aço,5,active,{},2026-01-01
+5,420.00,Ukulele Luar Concert,9,Ukulele concert,0,active,{},2026-01-01
+6,900.00,Violão Antigo Clássico,5,Modelo descontinuado,0,discontinued,{},2026-01-01

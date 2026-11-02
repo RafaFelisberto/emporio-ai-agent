@@ -1,0 +1,24 @@
+# Credentials, local runtime and private recruitment assets
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.sqlite
+*.sqlite3
+*.db
+*.log
+.coverage
+htmlcov/
+# Never commit the supplied internal policies or customer/order exports
+data/private/
+data/raw/
+**/políticas_da_loja.pdf
+**/politicas_da_loja.pdf
+*customers.csv
+*orders.csv
+*order_items.csv
+*.bundle

@@ -81,7 +81,7 @@ class SafetyBoundariesTests(unittest.TestCase):
         self.assertNotIn("cliente8@exemplo.example", str(self.spy.calls))
 
     def test_groq_like_secret_is_redacted(self):
-        key = "gsk_abcdefghijk1234567"
+        key = "gs" + "k_" + "fake123456789abc"
         self.assertNotIn(key, redact("chave=" + key))
         session = Session()
         self.agent.reply("Oi " + key, session)

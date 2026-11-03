@@ -41,7 +41,7 @@ class ScopeCompletion:
             call = SimpleNamespace(
                 id="scope_1",
                 function=SimpleNamespace(name="search_policies",
-                                         arguments='{"topic":"scope"}'))
+                                         arguments='{}'))
             return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
                 content=None, tool_calls=[call]))])
         return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(

@@ -141,11 +141,12 @@ class Agent:
         session.last_llm_requests = 0
         session.last_error_code = None
         messages = [{"role": "system", "content": SYSTEM_PROMPT}, *session.history[-10:], {"role": "user", "content": question}]
+        scope_lookup = requires_scope_lookup(question)
         for round_index in range(4):
             # The first response on accessory/scope questions must cite the
             # store's policy; greetings and ordinary catalog prompts stay auto.
             choice = ({"type": "function", "function": {"name": "search_policies"}}
-                      if round_index == 0 and requires_scope_lookup(question) else "auto")
+                      if round_index == 0 and scope_lookup else "auto")
             try:
                 session.last_llm_requests += 1
                 result = self.client.chat.completions.create(
@@ -182,6 +183,10 @@ class Agent:
                 except (json.JSONDecodeError, ValueError):
                     payload = {"error": "Argumentos inválidos"}
                 else:
+                    # A forced lookup still needs the correct section if the
+                    # LLM omits optional arguments or guesses an unrelated topic.
+                    if scope_lookup and round_index == 0 and c.function.name == "search_policies":
+                        args["topic"] = "scope"
                     payload = self.tool(c.function.name, args, session)
                 messages.append({"role": "tool", "tool_call_id": c.id,
                                  "content": json.dumps(payload, ensure_ascii=False, default=str)[:6000]})

@@ -22,3 +22,6 @@ data/raw/
 *orders.csv
 *order_items.csv
 *.bundle
+
+# Opt-in evaluation metrics reports; keep local and out of Git
+evals/results/

@@ -145,6 +145,26 @@ LLM → ferramenta → LLM. **Não foram feitos testes ao vivo com um token Groq
 python -m unittest discover -s tests -v
 ```
 
+## Avaliação, segurança e métricas (fase 3)
+
+A suíte em [evals/README.md](evals/README.md) reúne **42 cenários sintéticos
+(51 turnos)**: catálogo, políticas, escopo comercial, pedidos, conversas com
+múltiplos turnos e tentativas adversariais.
+
+```bash
+# Sem API, seis casos distribuídos entre as seis categorias
+python -m scripts.evaluate
+
+# Opcional com sua chave gratuita do Groq configurada localmente em .env
+python -m scripts.evaluate --provider groq --limit 6 --cooldown 1
+```
+
+O runner mede resultados por categoria, erros de conteúdo, chamadas à API,
+latência p50/p95 e tokens quando a API os fornece. Ele salva apenas IDs e
+métricas, **nunca prompts ou respostas**. Avaliação lexical automatizada não
+comprova segurança completa nem substitui revisão humana. O CI continua
+offline, sem segredo do Groq.
+
 ## Limitações conhecidas e próximos passos
 
 - Estoque, preços, promoções e rastreio dependem de arquivos importados, não de

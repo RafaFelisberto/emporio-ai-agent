@@ -17,7 +17,9 @@
 - **Prompt injection nos CSVs:** nomes, descrições e políticas são tratados como dados,
   não instruções; esta barreira depende também da robustez do modelo.
 - **Excesso de chamadas:** orçamento de até 4 rodadas de ferramenta por turno e limite de respostas.
-- **Vazamento de tokens:** variáveis de ambiente, arquivos `.env` ignorados, nenhum segredo no código.
+- **Vazamento de tokens:** variáveis de ambiente, arquivos `.env` ignorados; strings no formato `gsk_...` são mascaradas no texto antes do LLM. Isso não substitui rotação de chaves vazadas.
+- **Abuso de tokens de entrada:** mensagens com mais de 2.000 caracteres são rejeitadas pelo backend antes da chamada ao provedor.
+- **Pedidos sem autorização:** solicitações de status com ID conhecido são interrompidas no código Python antes do modelo se o pedido não tiver sido verificado na sessão; chamadas diretas à ferramenta continuam validando autorização.
 
 ## Não adequado para produção
 
@@ -26,3 +28,11 @@ sessão autenticada, verificação de identidade mais forte, rate limiting por c
 controle de acesso persistente, política LGPD e governança de dados. Revise também
 os termos de processamento de dados de qualquer provedor externo antes de enviar
 conteúdo interno ou informações pessoais.
+
+## Verificações para o desafio
+
+- `python -m unittest discover -s tests -v`: inclui regressões para sessão isolada, mensagens excessivas, e-mails inválidos e ocultação de chaves.
+- `python -m scripts.live_smoke`: três cenários Groq reais com dados sintéticos e consumo de quota (opcional, apenas local).
+- `python -m scripts.repeat_eval --provider groq`: avaliação repetida opcional; não executar no CI público com secrets.
+
+Os testes de prompt injection são iniciais e não oferecem garantia de segurança contra adversários reais. Não publique CSVs ou políticas internas do desafio ao compartilhar logs.

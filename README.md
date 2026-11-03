@@ -138,8 +138,10 @@ rodadas e até cinco chamadas de ferramentas por rodada. São mantidas apenas as
 
 Os exemplos são saídas executadas com **fixtures públicas sintéticas no modo
 `offline`**, e não transcrições fictícias de uma execução com o modelo Groq.
-Os testes de integração usam um cliente Groq simulado para validar a sequência
-LLM → ferramenta → LLM. **Não foram feitos testes ao vivo com um token Groq.**
+Os testes de integração simulam o ciclo LLM → ferramenta → LLM sem consumir API.
+**Também foram feitos testes ao vivo com Groq** em ambiente local, descritos na
+seção "Evidências de validação" abaixo. Os cinco exemplos deste diretório
+continuam identificados como demonstrações offline, sem alegar que são transcrições do LLM.
 
 ```bash
 python -m unittest discover -s tests -v
@@ -164,6 +166,36 @@ latência p50/p95 e tokens quando a API os fornece. Ele salva apenas IDs e
 métricas, **nunca prompts ou respostas**. Avaliação lexical automatizada não
 comprova segurança completa nem substitui revisão humana. O CI continua
 offline, sem segredo do Groq.
+
+## Evidências de validação
+
+Foram realizadas verificações locais com Python, Groq e o pacote CSV original.
+Não há chave de API no repositório nem execução real do Groq na CI.
+
+| Verificação | Evidência |
+| --- | --- |
+| Testes de unidade e integração simulada | 45/45 aprovados após os ajustes de segurança e compatibilidade |
+| Smoke test Groq (3 cenários) | 3/3 aprovados, com uso de ferramentas |
+| Avaliação Groq de 6 cenários | 6/6 aprovados |
+| Avaliação ampliada de 12 cenários | 10/12 aprovados; duas respostas de fallback foram observadas |
+| Repetição dirigida de 2 cenários | 3 rodadas, 6/6 tentativas aprovadas, 18 requisições LLM |
+| Importação privada dos CSVs do desafio | 9 categorias, 65 produtos, 25 promoções, 50 clientes e 20 pedidos importados; consulta ao Takamine GD20 resolvida |
+
+Os resultados das chamadas Groq foram observados na máquina do desenvolvedor e
+não estão disponíveis como artefato de CI. A aprovação posterior dos cenários
+**não apaga as duas falhas intermitentes** anteriores. As métricas p50/p95 são de
+turnos e de amostras pequenas; não comprovam confiabilidade em produção.
+Confira os scripts em [evals/README.md](evals/README.md) e execute os testes
+sem API usando `python -m unittest discover -s tests -v`.
+
+### Proteções adicionais na entrada
+
+- Limite de 2.000 caracteres por mensagem para reduzir abuso e consumo de tokens.
+- Perguntas de status de pedido sem validação de identidade são respondidas
+  pelo backend **antes** de qualquer consulta ao modelo.
+- Strings com formato de chave Groq são ocultadas antes de entrar no contexto
+  do LLM; a chave real deve ficar apenas no arquivo `.env` local.
+- O modelo continua sem acesso direto a SQL, credenciais ou dados privados.
 
 ## Limitações conhecidas e próximos passos
 
@@ -238,7 +270,8 @@ Perguntas sobre acessórios comerciais (ex.: palhetas, cabos, pedais) agora
 exigem `search_policies` no primeiro turno do Groq; a seção `scope` é
 fixada pelo backend mesmo se o modelo omitir parâmetros opcionais. Isso evita
 que uma resposta sobre o escopo de vendas dependa apenas do prompt do LLM.
-Perguntas gerais e buscas de instrumentos mantêm `tool_choice=auto`.
+Saudações e perguntas genéricas mantêm `tool_choice=auto`; consultas factuais
+de catálogo, preços e políticas exigem ferramentas na primeira rodada.
 
 No GPT-OSS, a chamada utiliza `reasoning_effort=low` e
 `max_completion_tokens=4096`. Isso evita esgotar cedo o orçamento de

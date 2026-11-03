@@ -220,6 +220,20 @@ fixada pelo backend mesmo se o modelo omitir parâmetros opcionais. Isso evita
 que uma resposta sobre o escopo de vendas dependa apenas do prompt do LLM.
 Perguntas gerais e buscas de instrumentos mantêm `tool_choice=auto`.
 
+No GPT-OSS, a chamada utiliza `reasoning_effort=low` e
+`max_completion_tokens=4096`. Isso evita esgotar cedo o orçamento de
+raciocínio antes de uma chamada de ferramenta. O próprio Groq pode encerrar
+com `finish_reason=length`: nesse caso o agente retorna erro explícito em vez
+de interpretar uma resposta vazia como conteúdo. Consultas de preço e de
+políticas comerciais exigem uma ferramenta na primeira rodada; saudação
+continua usando `auto`. Isso é seleção de ferramenta pelo modelo **com
+obrigação imposta pelo backend**, não execução automática de SQL pelo LLM.
+
+O teste `live_smoke` agora mostra `finish`, `output` e `model` sem imprimir
+respostas ou argumentos. `fact_check` é heurístico, não uma prova de
+correção semântica; principalmente a palavra "não" isolada não é mais
+suficiente para aprovar o cenário de escopo.
+
 O orquestrador desativa ferramentas paralelas para compatibilidade com GPT-OSS
 20B/120B e diferencia falhas de autenticação (401/403), requisição inválida
 (400/404/422) e limite de quota (429), sem revelar mensagens brutas da API.

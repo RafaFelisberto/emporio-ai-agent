@@ -77,6 +77,9 @@ class Session:
     last_finish_reason: str | None = None
     last_output_kind: str | None = None
     last_model: str | None = None
+    last_prompt_tokens: int = 0
+    last_completion_tokens: int = 0
+    last_usage_observations: int = 0
 
 
 def redact(text: str) -> str:
@@ -141,6 +144,16 @@ class Agent:
         return {"error": "Ferramenta não autorizada"}
 
     def reply(self, question: str, session: Session) -> str:
+        # Reset per-turn telemetry even when the request is denied before LLM.
+        session.last_tool_calls.clear()
+        session.last_llm_requests = 0
+        session.last_error_code = None
+        session.last_finish_reason = None
+        session.last_output_kind = None
+        session.last_model = None
+        session.last_prompt_tokens = 0
+        session.last_completion_tokens = 0
+        session.last_usage_observations = 0
         clean, denial = self._verify_incoming(question, session)
         if denial:
             return denial
@@ -153,12 +166,6 @@ class Agent:
         return answer
 
     def _llm(self, question: str, session: Session) -> str:
-        session.last_tool_calls.clear()
-        session.last_llm_requests = 0
-        session.last_error_code = None
-        session.last_finish_reason = None
-        session.last_output_kind = None
-        session.last_model = None
         messages = [{"role": "system", "content": SYSTEM_PROMPT}, *session.history[-10:], {"role": "user", "content": question}]
         scope_lookup = requires_scope_lookup(question)
         first_tool = required_lookup(question)
@@ -187,6 +194,14 @@ class Agent:
                 if status in (400, 404, 422):
                     return "O Groq rejeitou a requisição. Confira o modelo configurado e a compatibilidade das ferramentas."
                 return "Não consegui consultar o assistente de IA agora. Tente novamente ou procure o atendimento humano."
+            usage = getattr(result, "usage", None)
+            if usage is not None:
+                prompt_tokens = getattr(usage, "prompt_tokens", None)
+                completion_tokens = getattr(usage, "completion_tokens", None)
+                if isinstance(prompt_tokens, int) and isinstance(completion_tokens, int):
+                    session.last_prompt_tokens += prompt_tokens
+                    session.last_completion_tokens += completion_tokens
+                    session.last_usage_observations += 1
             choice_result = result.choices[0]
             output = choice_result.message
             calls = output.tool_calls or []

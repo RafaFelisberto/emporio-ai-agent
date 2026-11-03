@@ -68,7 +68,8 @@ class GroqRuntimeTests(unittest.TestCase):
         session = Session()
         self.agent_with(fake).reply("Olá!", session)
         self.assertIs(fake.kwargs["parallel_tool_calls"], False)
-        self.assertEqual(fake.kwargs["max_completion_tokens"], 1024)
+        self.assertEqual(fake.kwargs["max_completion_tokens"], 4096)
+        self.assertEqual(fake.kwargs["reasoning_effort"], "low")
         self.assertEqual(session.last_llm_requests, 1)
         self.assertEqual(session.last_tool_calls, [])
 
@@ -95,6 +96,36 @@ class GroqRuntimeTests(unittest.TestCase):
         fake = SingleCompletion()
         self.agent_with(fake).reply("Oi!", Session())
         self.assertEqual(fake.kwargs["tool_choice"], "auto")
+
+    def test_factual_queries_force_retrieval_or_fail_closed(self):
+        cases = (
+            ("Quanto custa o Violão Aurora GD20?", "search_products"),
+            ("Qual o prazo de arrependimento de uma compra online?", "search_policies"),
+            ("Vocês vendem palhetas avulsas?", "search_policies"),
+        )
+        for question, expected in cases:
+            with self.subTest(question=question):
+                fake = SingleCompletion()
+                session = Session()
+                answer = self.agent_with(fake).reply(question, session)
+                self.assertEqual(fake.kwargs["tool_choice"],
+                                 {"type": "function", "function": {"name": expected}})
+                self.assertIn("Não foi possível consultar a fonte", answer)
+                self.assertEqual(session.last_tool_calls, [])
+
+    def test_truncated_reasoning_is_reported_without_false_success(self):
+        class LengthCompletion:
+            def create(self, **kwargs):
+                return SimpleNamespace(model="openai/gpt-oss-20b", choices=[
+                    SimpleNamespace(finish_reason="length", message=SimpleNamespace(
+                        content=None, tool_calls=None))])
+        session = Session()
+        answer = self.agent_with(LengthCompletion()).reply("Oi!", session)
+        self.assertIn("excedeu o limite de geração", answer)
+        self.assertNotIn("Não consegui responder com segurança", answer)
+        self.assertEqual(session.last_finish_reason, "length")
+        self.assertEqual(session.last_output_kind, "empty")
+        self.assertEqual(session.last_model, "openai/gpt-oss-20b")
 
     def test_provider_errors_do_not_expose_secret_or_exception(self):
         messages = {401: "GROQ_API_KEY", 403: "GROQ_API_KEY", 429: "limite", 400: "Groq rejeitou", 503: "Não consegui"}

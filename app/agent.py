@@ -12,6 +12,8 @@ from .storage import Store, money, normalized
 
 EMAIL_RX = re.compile(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}")
 PHONE_RX = re.compile(r"(?<![\w])(?:\+?55[ -]?)?\(?\d{2}\)?[ -]*9?\d{4}[ -]?\d{4}(?![\w])")
+MAX_USER_MESSAGE_CHARS = 2000
+GROQ_SECRET_RX = re.compile(r"\bgsk_[A-Za-z0-9_-]{8,}\b")
 ORDER_RX = re.compile(r"(?:\bpedido\s*(?:n[.º°o]*\s*)?\#?\s*|\#)(\d{1,9})\b", re.IGNORECASE)
 # Only commercial-scope terms, not every mention of instrument strings/cables.
 # Normalization removes accents before matching.
@@ -83,6 +85,7 @@ class Session:
 
 
 def redact(text: str) -> str:
+    text = GROQ_SECRET_RX.sub("[chave de API ocultada]", text)
     text = EMAIL_RX.sub("[email verificado localmente]", text)
     text = PHONE_RX.sub("[telefone oculto]", text)
     # No extra phone/CPF-like digits are needed for LLM context.
@@ -154,9 +157,23 @@ class Agent:
         session.last_prompt_tokens = 0
         session.last_completion_tokens = 0
         session.last_usage_observations = 0
+        # Validate before touching order context or spending provider tokens.
+        if not isinstance(question, str):
+            return "Envie sua pergunta como texto."
+        if not question.strip():
+            return "Digite uma pergunta para iniciar o atendimento."
+        if len(question) > MAX_USER_MESSAGE_CHARS:
+            return "Sua mensagem é muito longa. Resuma a dúvida em até 2.000 caracteres."
         clean, denial = self._verify_incoming(question, session)
         if denial:
             return denial
+        # Access control is enforced in Python, not delegated to the LLM.
+        # Unverified order queries cannot trigger model completions.
+        match = ORDER_RX.search(question)
+        intent = normalized(question)
+        if (match and int(match.group(1)) not in session.verified_order_ids
+                and any(word in intent for word in ("pedido", "status", "rastreio", "rastreamento"))):
+            return f"Para consultar o pedido #{int(match.group(1))}, informe o e-mail utilizado na compra. A validação será feita localmente."
         if self.provider == "offline":
             answer = self._offline(clean, session)
         else:

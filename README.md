@@ -214,6 +214,12 @@ nova sessão, e a chamada pode consumir quota gratuita; não é executado no CI.
 Uma falha indica algo a investigar, não comprova necessariamente defeito no
 modelo. Revisão humana de tom, precisão e segurança ainda é necessária.
 
+Perguntas sobre acessórios comerciais (ex.: palhetas, cabos, pedais) agora
+exigem `search_policies` no primeiro turno do Groq; a seção `scope` é
+fixada pelo backend mesmo se o modelo omitir parâmetros opcionais. Isso evita
+que uma resposta sobre o escopo de vendas dependa apenas do prompt do LLM.
+Perguntas gerais e buscas de instrumentos mantêm `tool_choice=auto`.
+
 O orquestrador desativa ferramentas paralelas para compatibilidade com GPT-OSS
 20B/120B e diferencia falhas de autenticação (401/403), requisição inválida
 (400/404/422) e limite de quota (429), sem revelar mensagens brutas da API.

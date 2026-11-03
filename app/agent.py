@@ -16,11 +16,24 @@ ORDER_RX = re.compile(r"(?:\bpedido\s*(?:n[.º°o]*\s*)?\#?\s*|\#)(\d{1,9})\b", 
 # Only commercial-scope terms, not every mention of instrument strings/cables.
 # Normalization removes accents before matching.
 SCOPE_TERMS_RX = re.compile(r"\b(?:palhetas?|amplificadores?|pedais|pedal|capotrastes?|cases?|acessorios?|cabos?)\b|\bcordas?\s+avulsas?\b")
+CATALOG_TERMS_RX = re.compile(r"\b(?:preco|precos|custa|custam|custaria|valor|valores|estoque|disponivel|disponiveis|promocao|promocoes|desconto|comprar|violao|violoes|guitarras?|ukuleles?|teclados?|baixos?)\b")
+POLICY_TERMS_RX = re.compile(r"\b(?:devolucao|devolver|arrependimento|troca|trocar|defeito|garantia|reembolso|frete|entrega|horario|funcionamento|pix|parcelamento|pagamento|privacidade|politica|politicas|endereco|whatsapp)\b")
 
 
 def requires_scope_lookup(question: str) -> bool:
     """Scope claims should be grounded in the policy instead of model memory."""
     return bool(SCOPE_TERMS_RX.search(normalized(question)))
+
+
+def required_lookup(question: str) -> str | None:
+    """Enforce grounded answers for common commercial facts, not for greetings."""
+    cleaned = normalized(question)
+    if requires_scope_lookup(question) or POLICY_TERMS_RX.search(cleaned):
+        return "search_policies"
+    if CATALOG_TERMS_RX.search(cleaned):
+        return "search_products"
+    return None
+
 
 SYSTEM_PROMPT = """Você é o assistente virtual do Empório da Música, loja fictícia de instrumentos musicais em Campo Grande/MS.
 Estilo: simpático, informal e profissional; respostas curtas em português brasileiro.
@@ -61,6 +74,9 @@ class Session:
     last_tool_calls: list[str] = field(default_factory=list)
     last_llm_requests: int = 0
     last_error_code: int | None = None
+    last_finish_reason: str | None = None
+    last_output_kind: str | None = None
+    last_model: str | None = None
 
 
 def redact(text: str) -> str:
@@ -140,19 +156,25 @@ class Agent:
         session.last_tool_calls.clear()
         session.last_llm_requests = 0
         session.last_error_code = None
+        session.last_finish_reason = None
+        session.last_output_kind = None
+        session.last_model = None
         messages = [{"role": "system", "content": SYSTEM_PROMPT}, *session.history[-10:], {"role": "user", "content": question}]
         scope_lookup = requires_scope_lookup(question)
+        first_tool = required_lookup(question)
         for round_index in range(4):
-            # The first response on accessory/scope questions must cite the
-            # store's policy; greetings and ordinary catalog prompts stay auto.
-            choice = ({"type": "function", "function": {"name": "search_policies"}}
-                      if round_index == 0 and scope_lookup else "auto")
+            # Require verified data for factual commercial questions; general
+            # conversation still uses automatic tool selection.
+            choice = ({"type": "function", "function": {"name": first_tool}}
+                      if round_index == 0 and first_tool else "auto")
             try:
                 session.last_llm_requests += 1
-                result = self.client.chat.completions.create(
-                    model=self.model, messages=messages, tools=TOOLS,
-                    tool_choice=choice, parallel_tool_calls=False,
-                    temperature=0.1, max_completion_tokens=1024)
+                options = dict(model=self.model, messages=messages, tools=TOOLS,
+                               tool_choice=choice, parallel_tool_calls=False,
+                               temperature=0.1, max_completion_tokens=4096)
+                if self.model in ("openai/gpt-oss-20b", "openai/gpt-oss-120b"):
+                    options["reasoning_effort"] = "low"
+                result = self.client.chat.completions.create(**options)
             except Exception as exc:
                 # Never send exception details to the customer: they may contain
                 # provider metadata or sensitive request information.
@@ -165,10 +187,20 @@ class Agent:
                 if status in (400, 404, 422):
                     return "O Groq rejeitou a requisição. Confira o modelo configurado e a compatibilidade das ferramentas."
                 return "Não consegui consultar o assistente de IA agora. Tente novamente ou procure o atendimento humano."
-            output = result.choices[0].message
+            choice_result = result.choices[0]
+            output = choice_result.message
             calls = output.tool_calls or []
+            session.last_finish_reason = getattr(choice_result, "finish_reason", None)
+            session.last_model = str(getattr(result, "model", self.model) or self.model)
+            session.last_output_kind = "tools" if calls else "text" if output.content else "empty"
             if not calls:
-                return redact((output.content or "Não consegui responder com segurança.").strip())
+                if session.last_finish_reason == "length":
+                    return "A resposta do modelo excedeu o limite de geração. Tente novamente."
+                if not output.content or not output.content.strip():
+                    return "O modelo não produziu resposta. Tente novamente."
+                if round_index == 0 and first_tool:
+                    return "Não foi possível consultar a fonte necessária. Tente novamente."
+                return redact(output.content.strip())
             if len(calls) > 5:
                 return "Não consegui concluir essa consulta com segurança. Tente uma pergunta mais específica."
             messages.append({"role": "assistant", "content": output.content, "tool_calls": [
@@ -185,8 +217,11 @@ class Agent:
                 else:
                     # A forced lookup still needs the correct section if the
                     # LLM omits optional arguments or guesses an unrelated topic.
-                    if scope_lookup and round_index == 0 and c.function.name == "search_policies":
-                        args["topic"] = "scope"
+                    if round_index == 0 and first_tool == "search_policies" and c.function.name == "search_policies":
+                        if scope_lookup:
+                            args["topic"] = "scope"
+                        elif not args.get("topic") and not args.get("query"):
+                            args["query"] = question
                     payload = self.tool(c.function.name, args, session)
                 messages.append({"role": "tool", "tool_call_id": c.id,
                                  "content": json.dumps(payload, ensure_ascii=False, default=str)[:6000]})

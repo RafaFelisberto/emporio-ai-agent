@@ -80,3 +80,30 @@ Uma execução que passa na repetição não elimina a falha anterior. Compare
 frequência de falhas, uso de tokens e latência antes de mudar o orçamento
 do modelo. **Não rode automaticamente 42 casos novamente** para diagnosticar
 apenas dois problemas.
+
+## Repetir casos de estabilidade com uma única execução
+
+Para quantificar a intermitência dos dois cenários de catálogo, use o executor
+de repetição. O modo padrão é **offline** e não faz chamadas de rede.
+
+```powershell
+# Validação gratuita, sem chave: 3 repetições de 2 casos
+.\.venv\Scripts\python.exe -m scripts.repeat_eval
+
+# Avaliação REAL (opcional): 3 rodadas, 2 casos por rodada
+.\.venv\Scripts\python.exe -m scripts.repeat_eval --provider groq --runs 3 --cooldown 2 --between-runs 5 --max-requests-per-run 12 --max-total-requests 36
+```
+
+O destino padrão é um diretório local com timestamp em
+`evals/results/stability/`. O arquivo `summary.json` contém taxa de aprovação
+por cenário, tentativas reprovadas e não executadas, tipos de falha, tokens
+quando disponíveis, latência p50/p95 dos **turnos**, e número de chamadas.
+Os arquivos `run_01.json` a `run_03.json` contêm diagnósticos por execução.
+Os diretórios de resultados estão ignorados pelo Git.
+
+A rotina interrompe novas rodadas diante de erros HTTP 429 (limite de quota),
+401/403 (autenticação) ou rodadas incompletas. Os limites de chamadas são
+**aproximados**, pois o agente pode fazer mais de uma requisição por turno.
+Os três testes não comprovam confiabilidade estatística, e o score lexical
+pode rejeitar respostas semanticamente corretas ou aprovar respostas incompletas.
+Não publique relatórios que não foram previamente inspecionados.

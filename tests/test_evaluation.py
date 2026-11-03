@@ -8,7 +8,8 @@ import unittest
 from app.agent import Agent, Session
 from app.settings import demo_dir
 from app.storage import Store
-from scripts.evaluate import load_cases, select_cases, grade_turn, evaluate, percentile_nearest_rank
+from scripts.evaluate import (load_cases, select_cases, select_case_ids, fallback_kind,
+                              grade_turn, evaluate, percentile_nearest_rank)
 
 
 def completion(content=None, call=None, prompt=11, completion_tokens=8):
@@ -124,6 +125,38 @@ class EvaluationTests(unittest.TestCase):
                                  "authorization_required")
             finally:
                 store.close()
+
+    def test_select_failure_cases_and_classify_fallback(self):
+        cases = load_cases()
+        chosen = select_case_ids(cases, ["multi_catalog_price", "catalog_gd20_price",
+                                         "catalog_gd20_price"])
+        self.assertEqual([c["id"] for c in chosen],
+                         ["multi_catalog_price", "catalog_gd20_price"])
+        with self.assertRaises(ValueError):
+            select_case_ids(cases, ["unknown_scenario"])
+        self.assertEqual(fallback_kind("A resposta do modelo excedeu o limite de geração."),
+                         "generation_length")
+        self.assertIsNone(fallback_kind("O violão custa R$ 1.979,10"))
+
+    def test_safe_failure_diagnostics_have_no_raw_answer(self):
+        class FakeLength:
+            def create(self, **kwargs):
+                return SimpleNamespace(model="openai/gpt-oss-20b", usage=None,
+                    choices=[SimpleNamespace(finish_reason="length",
+                        message=SimpleNamespace(content=None, tool_calls=None))])
+        fake = SimpleNamespace(chat=SimpleNamespace(completions=FakeLength()))
+        chosen = select_case_ids(load_cases(), ["catalog_gd20_price"])
+        report = evaluate(chosen, provider="groq", client=fake)
+        self.assertEqual(report["summary"]["passed"], 0)
+        turn = report["cases"][0]["turns"][0]
+        self.assertEqual(turn["fallback"], "generation_length")
+        self.assertEqual(turn["finish"], "length")
+        self.assertEqual(turn["output"], "empty")
+        self.assertEqual(turn["tools"], [])
+        dump = json.dumps(report, ensure_ascii=False)
+        self.assertNotIn("Quanto custa", dump)
+        self.assertNotIn("A resposta do modelo excedeu", dump)
+        self.assertNotIn("Groq API", dump)
 
     def test_percentile(self):
         self.assertIsNone(percentile_nearest_rank([], 0.95))

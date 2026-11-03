@@ -59,3 +59,24 @@ prompt injection, fraude ou vazamento**. Verificação de e-mail + número de pe
 não é autenticação de produção. Para fortalecer o projeto: revisão humana de
 amostras, autorização por usuário autenticado, mais testes de negação de acesso,
 avaliação adversarial especializada e métricas históricas por modelo.
+
+## Investigar falhas intermitentes sem gastar a cota inteira
+
+Execute apenas cenários específicos com `--case`, repetindo a opção quando necessário:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.evaluate --provider groq --case catalog_gd20_price --case multi_catalog_price --cooldown 2 --max-requests 12 --output evals/results/falhas.json
+```
+
+Se um turno falhar, o terminal agora informa o número do turno, `fallback`,
+`finish`, `output`, `http`, `requests`, `latency_ms` e nomes de ferramentas
+permitidas. O JSON inclui os mesmos códigos por turno, nunca respostas ou
+perguntas brutas. `fallback=generation_length` significa término por limite;
+`fallback=source_not_consulted` sinaliza que uma ferramenta exigida não foi
+usada; `fallback=provider_unavailable` indica falha genérica da comunicação.
+
+Esses dados identificam **o tipo do erro**, não necessariamente sua causa raiz.
+Uma execução que passa na repetição não elimina a falha anterior. Compare
+frequência de falhas, uso de tokens e latência antes de mudar o orçamento
+do modelo. **Não rode automaticamente 42 casos novamente** para diagnosticar
+apenas dois problemas.

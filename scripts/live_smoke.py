@@ -50,12 +50,19 @@ def run() -> int:
                 answer = agent.reply(case.question, session).casefold()
                 tool_ok = case.tool in session.last_tool_calls
                 facts_ok = all(term.casefold() in answer for term in case.expected)
+                if case.name == "scope":
+                    # Prevent an error message beginning with "Não" from passing.
+                    facts_ok = facts_ok and any(term in answer for term in
+                                                 ("palhet", "acess", "vendemos"))
                 passed = tool_ok and facts_ok and session.last_error_code is None
                 failed += not passed
                 print(f"{'PASS' if passed else 'FAIL'} {case.name} | "
                       f"tools={','.join(session.last_tool_calls) or '-'} | "
                       f"requests={session.last_llm_requests} | tool_check={tool_ok} | "
-                      f"fact_check={facts_ok} | status={session.last_error_code or '-'}")
+                      f"fact_check={facts_ok} | status={session.last_error_code or '-'} | "
+                      f"finish={session.last_finish_reason or '-'} | "
+                      f"output={session.last_output_kind or '-'} | "
+                      f"model={session.last_model or agent.model}")
             print(f"Total: {len(CASES) - failed}/{len(CASES)} checks automáticos aprovados")
             print("Obs.: checks por palavras-chave não substituem avaliação semântica nem testes de segurança.")
             return 1 if failed else 0

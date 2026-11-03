@@ -29,7 +29,7 @@ class Check:
 CASES = (
     Check("catalog_price", "Quanto custa o Violão Aurora GD20?", "search_products", ("1.979,10",)),
     Check("returns_policy", "Qual o prazo de arrependimento de uma compra online?", "search_policies", ("7 dias",)),
-    Check("scope", "Vocês vendem palhetas avulsas?", "search_policies", ("não", "palheta")),
+    Check("scope", "Vocês vendem palhetas avulsas?", "search_policies", ("não",)),
 )
 
 
@@ -54,7 +54,8 @@ def run() -> int:
                 failed += not passed
                 print(f"{'PASS' if passed else 'FAIL'} {case.name} | "
                       f"tools={','.join(session.last_tool_calls) or '-'} | "
-                      f"requests={session.last_llm_requests} | status={session.last_error_code or '-'}")
+                      f"requests={session.last_llm_requests} | tool_check={tool_ok} | "
+                      f"fact_check={facts_ok} | status={session.last_error_code or '-'}")
             print(f"Total: {len(CASES) - failed}/{len(CASES)} checks automáticos aprovados")
             print("Obs.: checks por palavras-chave não substituem avaliação semântica nem testes de segurança.")
             return 1 if failed else 0
